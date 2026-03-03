@@ -195,7 +195,6 @@ def test_calculate_distance_missing_param():
     data = response.json().get("errors")
     
 
-
     assert_that(data).is_type_of(list)
     assert_that(response.status_code).is_equal_to(422)
     assert_that(data[0]["detail"]).is_equal_to("Please enter valid 'from' and 'to' airports.")
