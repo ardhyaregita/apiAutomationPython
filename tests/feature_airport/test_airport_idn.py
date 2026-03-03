@@ -2,11 +2,15 @@ import requests
 
 import json
 
+from assertpy import assert_that
+
+BASE_URL = "https://airportgap.com/api/"
+
+
 def test_get_all_airports():
     
-    url = "https://airportgap.com/api/airports"
+    response = requests.get(f'{BASE_URL}/airports')
     
-    response = requests.get(url)
     data = response.json().get('data')
     
     elapsed = response.elapsed.total_seconds()
@@ -33,9 +37,9 @@ def test_get_all_airports():
 
 def test_get_airports_by_id():
 
-    url = "https://airportgap.com/api/airports/HAM"
+    airportid = "HAM"
 
-    response = requests.get(url)
+    response = requests.get(f'{BASE_URL}/airports/{airportid}')
 
     data = response.json().get('data')
 #    print(data)
@@ -49,9 +53,9 @@ def test_get_airports_by_id():
     
 def test_get_airports_by_id_notfound():
 
-    url = "https://airportgap.com/api/airports/XXX"
+    airportid = "XXX"
 
-    response = requests.get(url)
+    response = requests.get(f'{BASE_URL}/airports/{airportid}')
 
     data = response.json()
 #    print(data)
@@ -62,9 +66,9 @@ def test_get_airports_by_id_notfound():
     
 def test_get_airports_by_id_invalid():
 
-    url = "https://airportgap.com/api/airports/123#"
+    airportid = "123@"
 
-    response = requests.get(url)
+    response = requests.get(f'{BASE_URL}/airports/{airportid}')
 
     data = response.json()
 #    print(data)
@@ -75,11 +79,10 @@ def test_get_airports_by_id_invalid():
 
 def test_get_airports_by_pagination():
 
-    url = "https://airportgap.com/api/airports/?page=1"
-    
-    page = 1
+    page = "?page="
+    pageNumber = 10
 
-    response = requests.get(url)
+    response = requests.get(f'{BASE_URL}/airports/{page}{pageNumber}')
 
     data = response.json()
     links = response.json().get("links", {})
@@ -87,17 +90,17 @@ def test_get_airports_by_pagination():
     assert response.status_code == 200
     assert len(data) < 30
 #    print(links)
-    assert links["self"] == f"https://airportgap.com/api/airports?page={page}"
+    assert links["self"] == f"https://airportgap.com/api/airports{page}{pageNumber}"
 
     if links.get("prev") and "?page=" in links["prev"]:
-        expected_next = f"https://airportgap.com/api/airports?page={page-1}"
+        expected_next = f"https://airportgap.com/api/airports{page}{pageNumber-1}"
         assert links["prev"] == expected_next
     else:
         assert links.get("prev") in [None,"https://airportgap.com/api/airports"]
 
 
     if links.get("next") and "?page=" in links["next"]:
-        expected_next = f"https://airportgap.com/api/airports?page={page+1}"
+        expected_next = f"https://airportgap.com/api/airports{page}{pageNumber+1}"
         assert links["next"] == expected_next
     else:
         assert links.get("next") in [None,"https://airportgap.com/api/airports"]
@@ -105,9 +108,9 @@ def test_get_airports_by_pagination():
 
 def test_get_airports_by_pagination_invalid():
 
-    url = "https://airportgap.com/api/airports/?page=ABC"
+    page = "?page=ABC"
 
-    response = requests.get(url)
+    response = requests.get(f'{BASE_URL}/airports/{page}')
     
     assert "text/html" in response.headers["Content-Type"]
     assert response.status_code == 404
@@ -116,10 +119,87 @@ def test_get_airports_by_pagination_invalid():
 
 def test_get_airports_by_pagination_outofrange():
 
-    url = "https://airportgap.com/api/airports/?page=999"
-    response = requests.get(url)
+    page = "?page=999"
+
+    response = requests.get(f'{BASE_URL}/airports/{page}')
 
     assert response.status_code in [200, 404]
 
     if response.status_code == 200:
         assert response.json()["data"] == []
+
+def test_calculate_distance():
+    payload = {
+        "from" : "YNA",
+        "to" : "YOC"
+    }
+
+    response = requests.post(f'{BASE_URL}/airports/distance', data=payload)
+    data = response.json().get("data")
+    
+    assert_that(data).is_type_of(dict)
+    assert_that(data).has_id("YNA-YOC")
+    assert_that(data["type"]).is_equal_to("airport_distance")
+    assert_that(data["attributes"]).is_not_empty()
+    assert_that(data["attributes"]["miles"]).is_equal_to(2794.8986339626285)
+
+def test_calculate_distance_same_airport():
+    payload = {
+        "from" : "YNA",
+        "to" : "YNA"
+    }
+
+    response = requests.post(f'{BASE_URL}/airports/distance', data=payload)
+    data = response.json().get("data")
+    
+    assert_that(data).is_type_of(dict)
+    assert_that(data).has_id("YNA-YNA")
+    assert_that(data["type"]).is_equal_to("airport_distance")
+    assert_that(data["attributes"]).is_not_empty()
+    assert_that(data["attributes"]["miles"]).is_equal_to(0.0)
+
+def test_calculate_distance_invalid_airport():
+    payload = {
+        "from" : "YNA",
+        "to" : "XXX"
+    }
+
+    response = requests.post(f'{BASE_URL}/airports/distance', data=payload)
+    data = response.json().get("errors")
+    
+    assert_that(data).is_type_of(list)
+    assert_that(response.status_code).is_equal_to(422)
+    assert_that(data[0]["detail"]).is_equal_to("Please enter valid 'from' and 'to' airports.")
+
+
+def test_calculate_distance_empty_airport():
+    payload = {
+        "from" : "YNA",
+        "to" : ""
+    }
+
+    response = requests.post(f'{BASE_URL}/airports/distance', data=payload)
+    data = response.json().get("errors")
+    
+    assert_that(data).is_type_of(list)
+    assert_that(response.status_code).is_equal_to(422)
+    assert_that(data[0]["detail"]).is_equal_to("Please enter valid 'from' and 'to' airports.")
+
+def test_calculate_distance_missing_param():
+    payload = {
+        "from" : "YNA",
+        
+    }
+
+    response = requests.post(f'{BASE_URL}/airports/distance', data=payload)
+    data = response.json().get("errors")
+    
+
+
+    assert_that(data).is_type_of(list)
+    assert_that(response.status_code).is_equal_to(422)
+    assert_that(data[0]["detail"]).is_equal_to("Please enter valid 'from' and 'to' airports.")
+
+
+
+
