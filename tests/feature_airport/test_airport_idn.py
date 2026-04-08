@@ -1,5 +1,7 @@
 import requests
 
+import pytest
+
 import json
 
 from assertpy import assert_that
@@ -198,6 +200,118 @@ def test_calculate_distance_missing_param():
     assert_that(data).is_type_of(list)
     assert_that(response.status_code).is_equal_to(422)
     assert_that(data[0]["detail"]).is_equal_to("Please enter valid 'from' and 'to' airports.")
+
+@pytest.fixture(scope="session")
+def auth_token(): 
+    payload = {
+        "email": "yourbestie@yopmail.com",
+        "password": "Pass123@"
+    }
+    
+    response = requests.post(f"{BASE_URL}/tokens", data=payload)
+    
+    token_data = response.json()
+    return token_data["token"]
+    
+def test_clear_all_favorites(auth_token):
+    headers = {"Authorization": f"Bearer token={auth_token}"}
+
+    response = requests.delete(f"{BASE_URL}/favorites/clear_all", headers=headers)
+
+    assert_that(response.status_code).is_equal_to(204)
+
+
+def test_add_new_favorite(auth_token):
+    headers = {"Authorization": f"Bearer token={auth_token}"}
+
+    new_airport = {
+        "airport_id": "JFK",
+        "note": "My usual layover when visiting family"
+    }
+    response = requests.post(f"{BASE_URL}/favorites", headers=headers, json=new_airport)
+    
+    data = response.json().get('data')
+ 
+    assert_that(response.status_code).is_equal_to(201)
+
+
+def test_add_favorite_duplicate(auth_token):
+    headers = {"Authorization": f"Bearer token={auth_token}"}
+
+    new_airport = {
+        "airport_id": "JFK",
+        "note": "My usual layover when visiting family"
+    }
+    response = requests.post(f"{BASE_URL}/favorites", headers=headers, json=new_airport)
+    
+    data = response.json().get('errors')
+ 
+    assert_that(response.status_code).is_equal_to(422)
+    assert_that(data[0]["detail"]).is_equal_to("Airport This airport is already in your favorites")
+
+
+
+def test_get_favorite(auth_token):
+    headers = {"Authorization": f"Token {auth_token}"}
+    
+    response = requests.get(f"{BASE_URL}/favorites", headers=headers)
+    assert_that(response.status_code).is_equal_to(200)
+
+    
+
+@pytest.fixture(scope="session")
+def fav_id(auth_token):
+    headers = {"Authorization": f"Token {auth_token}"}
+    response = requests.get(f"{BASE_URL}/favorites", headers=headers)
+    data = response.json().get("data")
+    return data[0]["id"]
+
+
+
+def test_get_favorite_byId(auth_token, fav_id):
+    headers = {"Authorization": f"Bearer token={auth_token}"}
+    
+    response = requests.get(f"{BASE_URL}/favorites/{fav_id}", headers=headers)
+    
+    data = response.json().get('data')
+ 
+    assert_that(response.status_code).is_equal_to(200)
+    assert_that(response.json).is_not_empty
+    assert_that(data).contains("id")
+    assert_that(data["id"]).is_equal_to(fav_id)
+    assert_that(data["attributes"]["airport"]["name"]).is_equal_to("John F Kennedy International Airport")
+    
+
+def test_update_note_fav(auth_token, fav_id):
+    headers = {"Authorization": f"Bearer token={auth_token}"}
+
+    payload = {
+        "note" : "This is updated Note!"
+    }
+
+    response = requests.patch(f"{BASE_URL}/favorites/{fav_id}", headers=headers, json=payload)
+
+    data = response.json().get('data')
+
+    assert_that(response.status_code).is_equal_to(200)
+    assert_that(data["attributes"]["note"]).is_equal_to(payload["note"])
+
+
+def test_delete_fav_byid(auth_token, fav_id):
+    headers = {"Authorization": f"Bearer token={auth_token}"}
+
+    response = requests.delete(f"{BASE_URL}/favorites/{fav_id}", headers=headers)
+
+    assert_that(response.status_code).is_equal_to(204)
+    
+def test_delete_fav_byid_notfound(auth_token, fav_id):
+    headers = {"Authorization": f"Bearer token={auth_token}"}
+
+    response = requests.delete(f"{BASE_URL}/favorites/{fav_id}", headers=headers)
+
+    assert_that(response.status_code).is_equal_to(404)
+    
+
 
 
 
